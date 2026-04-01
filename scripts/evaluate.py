@@ -23,7 +23,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from drone_rl.agents.td3 import TD3Agent
-from drone_rl.envs.drone_env import DroneEnv
+from drone_rl.envs.drone_env import DroneEnv, OBS_DIM
 from drone_rl.envs.swarm_env import SwarmEnv
 from drone_rl.utils.visualization import plot_coverage_heatmap, plot_trajectories
 
@@ -59,7 +59,7 @@ def main() -> None:
 
     obs, _ = env.reset(seed=args.seed)
     done = trunc = False
-    obs_dim_single = 7
+    obs_dim_single = OBS_DIM
 
     # (n_drones, T, 7) trajectory storage
     trajectories: List[List[np.ndarray]] = [[] for _ in range(n)]
@@ -75,10 +75,23 @@ def main() -> None:
         obs, reward, done, trunc, info = env.step(action)
         ep_reward += reward
 
+    # Append the terminal observation so the trajectory includes the final state
+    if any(trajectories[0]):  # only if at least one step was taken
+        for i in range(n):
+            trajectories[i].append(
+                obs[i * obs_dim_single:(i + 1) * obs_dim_single].copy()
+            )
+
     print(f"Episode reward:  {ep_reward:.2f}")
     print(f"Coverage:        {info.get('coverage', 0):.2%}")
 
     traj_arrays = [np.array(t) for t in trajectories]
+
+    # Guard: skip plotting if no steps were taken (degenerate episode)
+    if any(len(t) == 0 for t in traj_arrays):
+        print("Warning: empty trajectory — no steps were taken. Skipping plots.")
+        return
+
     x_max = cfg["env"]["x_max"]
     y_max = cfg["env"]["y_max"]
 

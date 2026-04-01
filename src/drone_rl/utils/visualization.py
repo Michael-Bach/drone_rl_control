@@ -48,6 +48,7 @@ def plot_trajectories(
         plt.close(fig)
     else:
         plt.show()
+        plt.close(fig)
 
 
 def plot_coverage_heatmap(
@@ -82,6 +83,7 @@ def plot_coverage_heatmap(
         plt.close(fig)
     else:
         plt.show()
+        plt.close(fig)
 
 
 def save_trajectory_gif(
