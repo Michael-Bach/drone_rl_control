@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 import yaml
@@ -6,7 +8,7 @@ from drone_rl.envs.drone_env import DroneEnv, OBS_DIM, ACTION_DIM
 
 @pytest.fixture
 def cfg():
-    with open("configs/test.yaml") as f:
+    with open(Path(__file__).parent.parent / "configs" / "test.yaml") as f:
         return yaml.safe_load(f)
 
 
@@ -99,7 +101,7 @@ def test_shared_reward_fn_not_reset_by_drone(env):
     """When reward_fn is passed externally, drone.reset() must not clear it."""
     from drone_rl.rewards.coverage import CoverageReward
     import yaml
-    with open("configs/test.yaml") as f:
+    with open(Path(__file__).parent.parent / "configs" / "test.yaml") as f:
         cfg = yaml.safe_load(f)
     shared = CoverageReward(x_max=10.0, y_max=10.0, cell_size=2.0)
     d = DroneEnv(cfg, reward_fn=shared)
@@ -108,3 +110,37 @@ def test_shared_reward_fn_not_reset_by_drone(env):
     assert shared.coverage_fraction > 0.0
     d.reset(seed=1)  # drone resets — shared grid must be untouched
     assert shared.coverage_fraction > 0.0
+
+
+def test_reset_reproducible_with_seed(cfg):
+    """Two resets with the same seed must produce identical observations."""
+    env1 = DroneEnv(cfg)
+    env2 = DroneEnv(cfg)
+    obs1, _ = env1.reset(seed=42)
+    obs2, _ = env2.reset(seed=42)
+    np.testing.assert_array_equal(obs1, obs2)
+
+
+def test_step_physics_one_step():
+    """Verify velocity and position update formula for a known action."""
+    import yaml
+    from pathlib import Path
+    with open(Path(__file__).parent.parent / "configs" / "test.yaml") as f:
+        cfg = yaml.safe_load(f)
+    env = DroneEnv(cfg)
+    # Place drone at known state: center, zero velocity
+    env._x = env._y = 0.0
+    env._z = 2.0
+    env._vx = env._vy = env._vz = 0.0
+
+    # Action: pure roll = 1.0 (max lateral), no other forces
+    from drone_rl.envs.drone_env import MAX_ACCEL
+    action = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32)
+    obs, _, _, _, _ = env.step(action)
+
+    dt = cfg["env"]["dt"]
+    expected_vx = MAX_ACCEL * dt  # 4.0 * 0.05 = 0.2 m/s
+    expected_x  = expected_vx * dt  # 0.2 * 0.05 = 0.01 m
+
+    assert obs[3] == pytest.approx(expected_vx, abs=1e-5)  # vx
+    assert obs[0] == pytest.approx(expected_x, abs=1e-5)   # x

@@ -86,13 +86,12 @@ class DroneEnv(gym.Env):
         options: Optional[Dict] = None,
     ) -> Tuple[np.ndarray, Dict]:
         super().reset(seed=seed)
-        rng = np.random.default_rng(seed)
 
-        self._x   = float(rng.uniform(-self.x_max * 0.8, self.x_max * 0.8))
-        self._y   = float(rng.uniform(-self.y_max * 0.8, self.y_max * 0.8))
-        self._z   = float(rng.uniform(0.5, self.max_altitude * 0.5))
+        self._x   = float(self.np_random.uniform(-self.x_max * 0.8, self.x_max * 0.8))
+        self._y   = float(self.np_random.uniform(-self.y_max * 0.8, self.y_max * 0.8))
+        self._z   = float(self.np_random.uniform(0.5, self.max_altitude * 0.5))
         self._vx  = self._vy = self._vz = 0.0
-        self._yaw = float(rng.uniform(0.0, 360.0))
+        self._yaw = float(self.np_random.uniform(0.0, 360.0))
         self._step_count = 0
 
         if self._owns_reward_fn:
@@ -130,6 +129,8 @@ class DroneEnv(gym.Env):
 
         self._step_count += 1
 
+        # z is clipped to [0, max_altitude]; z <= 0.0 fires on ground contact
+        # (intentional: ground contact ends the episode regardless of thrust direction)
         boundary = (
             abs(self._x) > self.x_max
             or abs(self._y) > self.y_max
