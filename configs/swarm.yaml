@@ -1,0 +1,45 @@
+# configs/swarm.yaml
+env:
+  x_max: 50.0
+  y_max: 50.0
+  max_altitude: 10.0
+  max_speed: 8.0
+  dt: 0.05
+  max_steps: 1000
+  n_drones: 3
+  min_separation: 2.0
+
+reward:
+  cell_size: 2.5
+  coverage_bonus: 1.0
+  revisit_penalty: 0.1
+  boundary_penalty: 10.0
+  proximity_penalty: 5.0
+
+agent:
+  lr_actor: 0.0001
+  lr_critic: 0.001
+  gamma: 0.99
+  tau: 0.005
+  hidden: 256
+  buffer_capacity: 200000
+  noise:
+    kind: decay
+    dim: 12
+    per: episode
+    gamma: 0.995
+    scale_min: 0.02
+    base:
+      kind: gaussian
+      dim: 12
+      sigma: 0.3
+
+training:
+  num_episodes: 3000
+  warmup_steps: 2000
+  batch_size: 128
+  save_every: 500
+  rollout_every: 200
+
+output_dir: outputs
+device: cpu

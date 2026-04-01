@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drone-rl"
+version = "0.1.0"
+description = "TD3-based RL for autonomous drone patrol and swarm coverage"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+authors = [
+  { name = "Michael Bach", email = "michaelbach0707@gmail.com" }
+]
+
+keywords = ["reinforcement-learning", "drone", "swarm", "simulation", "tello"]
+
+dependencies = [
+  "gymnasium>=0.29",
+  "torch>=2.0",
+  "numpy>=1.24",
+  "pyyaml>=6.0",
+  "matplotlib>=3.7",
+  "imageio>=2.31",
+  "tqdm>=4.65",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "flake8>=6.1",
+  "black>=23.0",
+]
+hardware = [
+  "djitellopy>=2.4",
+]
+viz = [
+  "imageio[ffmpeg]>=2.31",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

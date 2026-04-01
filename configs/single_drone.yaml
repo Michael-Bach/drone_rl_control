@@ -1,0 +1,42 @@
+# configs/single_drone.yaml
+env:
+  x_max: 25.0
+  y_max: 25.0
+  max_altitude: 10.0
+  max_speed: 8.0
+  dt: 0.05
+  max_steps: 500
+
+reward:
+  cell_size: 2.5
+  coverage_bonus: 1.0
+  revisit_penalty: 0.0
+  boundary_penalty: 10.0
+
+agent:
+  lr_actor: 0.0001
+  lr_critic: 0.001
+  gamma: 0.99
+  tau: 0.005
+  hidden: 256
+  buffer_capacity: 100000
+  noise:
+    kind: decay
+    dim: 4
+    per: episode
+    gamma: 0.995
+    scale_min: 0.02
+    base:
+      kind: gaussian
+      dim: 4
+      sigma: 0.3
+
+training:
+  num_episodes: 2000
+  warmup_steps: 1000
+  batch_size: 64
+  save_every: 500
+  rollout_every: 100
+
+output_dir: outputs
+device: cpu
