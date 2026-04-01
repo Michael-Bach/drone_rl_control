@@ -53,7 +53,8 @@ def test_reset_clears_visited(reward):
 def test_coverage_fraction_increments(reward):
     reward.compute(0.0, 0.0)
     reward.compute(5.0, 5.0)
-    assert reward.coverage_fraction > 0.0
+    # 10x10 grid (x_max=10, cell_size=2) → 100 cells; 2 visited = 0.02
+    assert reward.coverage_fraction == pytest.approx(0.02)
 
 
 def test_proximity_penalty_close(reward):
@@ -69,6 +70,6 @@ def test_proximity_no_penalty_far(reward):
 
 
 def test_out_of_bounds_position_clamped(reward):
-    # Positions outside the grid should be clamped, not raise
+    # Positions outside the grid should be clamped to the edge cell, not raise
     r = reward.compute(999.0, 999.0, boundary_violated=False)
-    assert isinstance(r, float)
+    assert r == pytest.approx(1.0)  # clamped to edge cell — first visit gives bonus
