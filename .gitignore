@@ -12,6 +12,9 @@ env/
 
 # Outputs and checkpoints
 outputs/
+*.pt
+*.pth
+*.log
 
 # Editor / OS
 .DS_Store
