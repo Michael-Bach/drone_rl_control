@@ -71,7 +71,8 @@ class TelloEnv:
 
         self._tello = Tello()
         self._tello.connect()
-        self._tello.streamon()
+        # Video stream not opened — TelloEnv uses only telemetry (state dict).
+        # Add self._tello.streamon() here if camera input is needed in future.
 
         # Dead-reckoned position (Tello has no absolute positioning sensor)
         self._x = self._y = self._z = 0.0
@@ -118,7 +119,6 @@ class TelloEnv:
     def close(self) -> None:
         """Land and disconnect."""
         self._tello.land()
-        self._tello.streamoff()
         self._tello.end()
 
     def _read_telemetry(self) -> np.ndarray:
@@ -129,18 +129,24 @@ class TelloEnv:
         Height is in cm; converted to m.
         Radar station detections can be added here as extra state dimensions.
         """
-        # Tello SDK returns None when telemetry is not yet available
-        vx_cms  = self._tello.get_speed_x() or 0
-        vy_cms  = self._tello.get_speed_y() or 0
-        vz_cms  = self._tello.get_speed_z() or 0
-        yaw_deg = self._tello.get_yaw()     or 0
-        z_cm    = self._tello.get_height()  or 0
+        # Read the full state dict once; .get(key, 0) is safe when telemetry
+        # is not yet available (avoids TelloException from individual getters).
+        state   = self._tello.get_current_state()
+        vx_cms  = state.get("vgx", 0)
+        vy_cms  = state.get("vgy", 0)
+        vz_cms  = state.get("vgz", 0)
+        yaw_deg = state.get("yaw", 0)
+        z_cm    = state.get("h", 0)
 
         self._vx = vx_cms / 100.0
         self._vy = vy_cms / 100.0
         self._vz = vz_cms / 100.0
+        # x, y: dead-reckoned by integrating velocity (no GPS on Tello)
         self._x  += self._vx * self.dt
         self._y  += self._vy * self.dt
+        # z: taken directly from barometric/ToF height sensor — more accurate
+        # than integrating vz. Note: _z and _vz are kinematically inconsistent
+        # (z does not equal z_prev + vz*dt), which is a known sim-to-real gap.
         self._z   = float(z_cm) / 100.0
         self._yaw = float(yaw_deg) % 360.0
 
