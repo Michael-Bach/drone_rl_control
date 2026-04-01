@@ -173,7 +173,7 @@ class TD3Agent:
             obs = self.obs_rms.normalize(obs)
         t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
-            return self.actor(t).cpu().numpy()[0]
+            return np.clip(self.actor(t).cpu().numpy()[0], -1.0, 1.0).astype(np.float32)
 
     def store(self, obs, action, reward, next_obs, done) -> None:
         """Store transition and update normalisation statistics."""
@@ -251,12 +251,16 @@ class TD3Agent:
 
     def save(self, path: str) -> None:
         torch.save({
-            "actor":          self.actor.state_dict(),
-            "actor_target":   self.actor_target.state_dict(),
-            "critic1":        self.critic1.state_dict(),
-            "critic2":        self.critic2.state_dict(),
-            "obs_rms_mean":   self.obs_rms.mean,
-            "obs_rms_var":    self.obs_rms.var,
+            "actor":           self.actor.state_dict(),
+            "actor_target":    self.actor_target.state_dict(),
+            "critic1":         self.critic1.state_dict(),
+            "critic1_target":  self.critic1_target.state_dict(),
+            "critic2":         self.critic2.state_dict(),
+            "critic2_target":  self.critic2_target.state_dict(),
+            "obs_rms_mean":    self.obs_rms.mean,
+            "obs_rms_var":     self.obs_rms.var,
+            "rew_rms_mean":    self.rew_rms.mean,
+            "rew_rms_var":     self.rew_rms.var,
         }, path)
 
     def load(self, path: str) -> None:
@@ -265,6 +269,12 @@ class TD3Agent:
         self.actor_target.load_state_dict(ck["actor_target"])
         self.critic1.load_state_dict(ck["critic1"])
         self.critic2.load_state_dict(ck["critic2"])
+        if "critic1_target" in ck:
+            self.critic1_target.load_state_dict(ck["critic1_target"])
+            self.critic2_target.load_state_dict(ck["critic2_target"])
         if "obs_rms_mean" in ck:
             self.obs_rms.mean = ck["obs_rms_mean"]
             self.obs_rms.var  = ck["obs_rms_var"]
+        if "rew_rms_mean" in ck:
+            self.rew_rms.mean = ck["rew_rms_mean"]
+            self.rew_rms.var  = ck["rew_rms_var"]

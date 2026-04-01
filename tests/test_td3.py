@@ -114,7 +114,8 @@ def test_train_after_filling_buffer(agent):
     for _ in range(50):
         agent.store(obs, np.zeros(ACTION_DIM), 1.0, obs, False)
     result = agent.train(batch_size=10)
-    assert result is not None
+    # train() returns bool; True = actor updated this step, False = critic-only step
+    assert isinstance(result, bool)
 
 
 def test_save_and_load(agent, tmp_path):
