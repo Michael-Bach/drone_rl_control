@@ -58,6 +58,9 @@ class CoverageReward:
         """
         Returns -proximity_penalty if any drone pair is closer than min_sep, else 0.
         positions: (N, 2) array of (x, y) positions.
+
+        Note: returns a fixed penalty on the first violating pair (not additive).
+        Multiple simultaneous violations receive the same penalty as one.
         """
         n = len(positions)
         for i in range(n):

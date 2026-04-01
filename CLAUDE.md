@@ -45,7 +45,7 @@ Two-phase system built around layered Gymnasium environments:
 
 **TD3 agent:** Lives in `src/drone_rl/agents/td3.py`. Uses twin critics, delayed actor updates, target policy smoothing, optional obs/reward normalisation. Same implementation pattern as the sibling `adversarial-reinforcement-learning-naval-warfare` project.
 
-**Sim-to-real:** `TelloEnv` in `src/drone_rl/utils/hardware.py` implements the same `reset()` / `step()` interface as `DroneEnv` but calls `djitellopy` SDK instead of simulating physics. Swap `DroneEnv` for `TelloEnv` at deploy time — `SwarmEnv` and TD3 are untouched.
+**Sim-to-real:** `TelloEnv` in `src/drone_rl/utils/hardware.py` implements the same `reset()` / `step()` interface as `DroneEnv` but calls `djitellopy` SDK instead of simulating physics. For single-drone deployment, swap `DroneEnv` for `TelloEnv` — TD3 is untouched. For swarm hardware deployment, `SwarmEnv.__init__` must be modified to accept a drone factory rather than hardcoding `DroneEnv`.
 
 ## Key Conventions
 

@@ -22,13 +22,13 @@ agent:
   buffer_capacity: 100000
   noise:
     kind: decay
-    dim: 4
+    dim: 4  # overridden at runtime by build_agent() to match actual action_dim
     per: episode
     gamma: 0.995
     scale_min: 0.02
     base:
       kind: gaussian
-      dim: 4
+      dim: 4  # overridden at runtime by build_agent() to match actual action_dim
       sigma: 0.3
 
 training:

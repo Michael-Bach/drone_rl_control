@@ -212,6 +212,7 @@ class TD3Agent:
                 self.critic2_target(next_s, next_a),
             )
 
+        c_losses = []
         for critic, opt in ((self.critic1, self.critic1_opt),
                             (self.critic2, self.critic2_opt)):
             loss = F.smooth_l1_loss(critic(states, actions), target_q)
@@ -219,8 +220,9 @@ class TD3Agent:
             loss.backward()
             nn.utils.clip_grad_norm_(critic.parameters(), self.grad_clip)
             opt.step()
+            c_losses.append(loss.item())
 
-        self.critic_loss = loss.item()
+        self.critic_loss = sum(c_losses) / len(c_losses)
         self.mean_q      = self.critic1(states, actions).mean().item()
 
         actor_updated = False

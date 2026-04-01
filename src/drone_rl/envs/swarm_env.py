@@ -22,6 +22,9 @@ class SwarmEnv(gym.Env):
 
     All drones share one CoverageReward instance: visiting a cell that any
     drone has already visited yields no coverage bonus.
+
+    Termination: the episode ends when ANY drone hits a boundary (any_done
+    semantics). With larger swarms, premature termination becomes more likely.
     """
 
     metadata = {"render_modes": []}
