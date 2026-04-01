@@ -87,6 +87,7 @@ def main() -> None:
         agent.noise.reset()
         done = trunc = False
         ep_reward = 0.0
+        info: dict = {}
 
         while not (done or trunc):
             if total_steps < warmup:
@@ -116,7 +117,9 @@ def main() -> None:
                 f"saved={ckpt.name}"
             )
 
-    agent.save(str(output_dir / "checkpoint_final.pt"))
+    final_path = output_dir / "checkpoint_final.pt"
+    agent.save(str(final_path))
+    tqdm.write(f"Training complete. Final checkpoint: {final_path}")
 
 
 if __name__ == "__main__":
