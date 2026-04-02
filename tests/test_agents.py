@@ -1,8 +1,6 @@
 """AgentBase contract tests: all three agents must satisfy the interface."""
-from pathlib import Path
 import numpy as np
 import pytest
-import yaml
 from drone_rl.agents.td3 import TD3Agent
 from drone_rl.agents.ddpg import DDPGAgent
 from drone_rl.agents.sac import SACAgent
@@ -82,3 +80,13 @@ def test_save_load_roundtrip(make_agent, tmp_path):
     agent.load(path)
     action = agent.select_action(obs, deterministic=True)
     assert action.shape == (ACTION_DIM,)
+
+
+def test_sac_train_step_includes_alpha_keys():
+    agent = _make_sac()
+    obs = np.zeros(STATE_DIM, dtype=np.float32)
+    for _ in range(50):
+        agent.store(obs, np.zeros(ACTION_DIM), 1.0, obs, 0.0)
+    result = agent.train_step()
+    assert "alpha" in result
+    assert "alpha_loss" in result

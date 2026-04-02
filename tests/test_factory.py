@@ -46,3 +46,8 @@ def test_make_agent_sac():
 def test_make_agent_unknown_raises():
     with pytest.raises(ValueError, match="Unknown agent type"):
         make_agent(_cfg("ppo"), obs_dim=11, action_dim=4)
+
+
+def test_make_agent_inherits_batch_size_from_training():
+    agent = make_agent(_cfg("td3"), obs_dim=11, action_dim=4)
+    assert agent.batch_size == 10  # from _BASE_CFG["training"]["batch_size"]
