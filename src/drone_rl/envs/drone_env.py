@@ -16,7 +16,7 @@ MAX_ALTITUDE = 10.0  # m
 MAX_ACCEL    = 4.0   # m/s²
 MAX_YAW_RATE = 90.0  # deg/s
 
-OBS_DIM    = 7   # x, y, z, vx, vy, vz, yaw
+OBS_DIM    = 11  # x, y, z, vx, vy, vz, yaw, radar_x, radar_y, radar_z, radar_t
 ACTION_DIM = 4   # thrust, roll, pitch, yaw_rate
 
 
@@ -24,7 +24,7 @@ class DroneEnv(gym.Env):
     """
     Single drone modelled as a point-mass in a bounded 3-D area.
 
-    Observation: [x, y, z, vx, vy, vz, yaw]              (7-dim, float32)
+    Observation: [x, y, z, vx, vy, vz, yaw, radar_x, radar_y, radar_z, radar_t]  (11-dim, float32)
     Action:      [thrust, roll, pitch, yaw_rate] ∈ [-1,1] (4-dim, float32)
 
     Parameters
@@ -75,6 +75,7 @@ class DroneEnv(gym.Env):
         self._vx = self._vy = self._vz = 0.0
         self._yaw = 0.0
         self._step_count = 0
+        self.radar_obs: np.ndarray = np.zeros(4, dtype=np.float32)
 
     # ------------------------------------------------------------------
     # Gymnasium interface
@@ -150,8 +151,11 @@ class DroneEnv(gym.Env):
     # ------------------------------------------------------------------
 
     def _obs(self) -> np.ndarray:
-        return np.array(
-            [self._x, self._y, self._z,
-             self._vx, self._vy, self._vz, self._yaw],
-            dtype=np.float32,
-        )
+        return np.concatenate([
+            np.array(
+                [self._x, self._y, self._z,
+                 self._vx, self._vy, self._vz, self._yaw],
+                dtype=np.float32,
+            ),
+            self.radar_obs,
+        ])

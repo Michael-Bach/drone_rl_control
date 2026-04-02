@@ -16,7 +16,7 @@ class SwarmEnv(gym.Env):
     """
     Wraps N DroneEnv instances under a single centralized controller.
 
-    Observation: (N * 7,) — concatenated drone states
+    Observation: (N * 11,) — concatenated drone states (7 physics + 4 radar each)
     Action:      (N * 4,) — split and dispatched per drone
     Reward:      shared scalar (sum of individual rewards / N)
 
