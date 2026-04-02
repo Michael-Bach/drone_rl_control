@@ -28,7 +28,10 @@ class RunningMeanStd:
         new_mean  = self.mean + delta * b_cnt / tot_count
         M2 = (self.var * self.count + b_var * b_cnt
               + delta ** 2 * self.count * b_cnt / tot_count)
-        self.mean, self.var, self.count = new_mean, M2 / tot_count, tot_count
+        shape = self.mean.shape
+        self.mean  = new_mean.reshape(shape)
+        self.var   = (M2 / tot_count).reshape(shape)
+        self.count = tot_count
 
     def normalize(self, x: np.ndarray, clip: Optional[float] = None) -> np.ndarray:
         x = (x - self.mean) / (np.sqrt(self.var) + 1e-8)
