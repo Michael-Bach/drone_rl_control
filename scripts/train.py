@@ -5,7 +5,8 @@ train.py — Training entry point for drone RL.
 Usage
 -----
   python scripts/train.py --config configs/single_drone.yaml
-  python scripts/train.py --config configs/swarm.yaml --swarm
+  python scripts/train.py --config configs/single_drone.yaml --algo sac
+  python scripts/train.py --config configs/swarm.yaml --swarm --algo td3
   python scripts/train.py --config configs/test.yaml --max-steps 10
 """
 
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict
 
@@ -22,9 +24,10 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from drone_rl.agents.td3 import TD3Agent
+from drone_rl.agents.factory import make_agent
 from drone_rl.envs.drone_env import DroneEnv
 from drone_rl.envs.swarm_env import SwarmEnv
+from drone_rl.utils.logger import TrainingLogger
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -32,51 +35,47 @@ def load_config(path: str) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def build_agent(cfg: Dict[str, Any], obs_dim: int, action_dim: int) -> TD3Agent:
-    ag = cfg["agent"]
-    noise_cfg = dict(ag["noise"])
-    noise_cfg["dim"] = action_dim
-    # Propagate dim into nested base if present
-    if "base" in noise_cfg:
-        noise_cfg["base"] = dict(noise_cfg["base"])
-        noise_cfg["base"]["dim"] = action_dim
-    return TD3Agent(
-        state_dim=obs_dim,
-        action_dim=action_dim,
-        noise_cfg=noise_cfg,
-        lr_actor=float(ag.get("lr_actor", 1e-4)),
-        lr_critic=float(ag.get("lr_critic", 1e-3)),
-        gamma=float(ag.get("gamma", 0.99)),
-        tau=float(ag.get("tau", 0.005)),
-        hidden=int(ag.get("hidden", 256)),
-        buffer_capacity=int(ag.get("buffer_capacity", 100_000)),
-        device=str(cfg.get("device", "cpu")),
-    )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",    required=True)
     parser.add_argument("--swarm",     action="store_true")
+    parser.add_argument("--algo",      default=None,
+                        help="Override agent.type in config (td3 | sac | ddpg)")
+    parser.add_argument("--wandb",     action="store_true",
+                        help="Enable W&B logging (overrides config)")
     parser.add_argument("--max-steps", type=int, default=None,
                         help="Override total env steps (for smoke tests)")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    tr  = cfg["training"]
 
+    # CLI overrides
+    if args.algo:
+        cfg["agent"]["type"] = args.algo
+    if args.wandb:
+        cfg.setdefault("training", {})["wandb"] = True
+
+    tr  = cfg["training"]
     env = SwarmEnv(cfg) if args.swarm else DroneEnv(cfg)
 
     obs_dim    = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
-    agent      = build_agent(cfg, obs_dim, action_dim)
+    agent      = make_agent(cfg, obs_dim, action_dim)
 
     output_dir = Path(cfg.get("output_dir", "outputs"))
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    warmup      = int(tr.get("warmup_steps", 1000))
-    batch_size  = int(tr.get("batch_size", 64))
-    save_every  = int(tr.get("save_every", 500))
+    algo_name = cfg["agent"].get("type", "td3")
+    run_name  = f"{algo_name}_{'swarm' if args.swarm else 'single'}"
+    logger    = TrainingLogger(
+        run_name=run_name,
+        output_dir=str(output_dir),
+        use_wandb=bool(tr.get("wandb", False)),
+        cfg=cfg,
+    )
+
+    warmup       = int(tr.get("warmup_steps", 1000))
+    save_every   = int(tr.get("save_every", 500))
     num_episodes = int(tr.get("num_episodes", 1000))
 
     total_steps = 0
@@ -84,10 +83,14 @@ def main() -> None:
 
     for ep in tqdm(range(num_episodes), desc="Episodes"):
         obs, _ = env.reset()
-        agent.noise.reset()
+        if hasattr(agent, "noise"):
+            agent.noise.reset()
         done = trunc = False
-        ep_reward = 0.0
-        info: dict = {}
+        ep_reward    = 0.0
+        ep_start     = time.time()
+        ep_steps     = 0
+        info: dict   = {}
+        train_metrics: dict = {}
 
         while not (done or trunc):
             if total_steps < warmup:
@@ -99,14 +102,26 @@ def main() -> None:
             agent.store(obs, action, reward, next_obs, float(done))
 
             if total_steps >= warmup:
-                agent.train(batch_size)
+                train_metrics = agent.train_step()
 
             obs = next_obs
-            ep_reward += reward
+            ep_reward   += reward
             total_steps += 1
+            ep_steps    += 1
 
             if max_steps is not None and total_steps >= max_steps:
+                logger.close()
                 return  # smoke test exit
+
+        ep_time = time.time() - ep_start
+        metrics = {
+            "episode_reward":    ep_reward,
+            "episode_length":    ep_steps,
+            "coverage_fraction": info.get("coverage", 0.0),
+            "steps_per_second":  ep_steps / max(ep_time, 1e-6),
+        }
+        metrics.update(train_metrics)
+        logger.log(episode=ep + 1, step=total_steps, metrics=metrics)
 
         if (ep + 1) % save_every == 0:
             ckpt = output_dir / f"checkpoint_{ep + 1}.pt"
@@ -119,6 +134,7 @@ def main() -> None:
 
     final_path = output_dir / "checkpoint_final.pt"
     agent.save(str(final_path))
+    logger.close()
     tqdm.write(f"Training complete. Final checkpoint: {final_path}")
 
 
