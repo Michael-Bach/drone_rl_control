@@ -75,7 +75,18 @@ class DroneEnv(gym.Env):
         self._vx = self._vy = self._vz = 0.0
         self._yaw = 0.0
         self._step_count = 0
-        self.radar_obs: np.ndarray = np.zeros(4, dtype=np.float32)
+        self._radar_obs: np.ndarray = np.zeros(4, dtype=np.float32)
+
+    @property
+    def radar_obs(self) -> np.ndarray:
+        return self._radar_obs
+
+    @radar_obs.setter
+    def radar_obs(self, value: np.ndarray) -> None:
+        v = np.asarray(value, dtype=np.float32)
+        if v.shape != (4,):
+            raise ValueError(f"radar_obs must have shape (4,), got {v.shape}")
+        self._radar_obs = v
 
     # ------------------------------------------------------------------
     # Gymnasium interface
@@ -94,6 +105,7 @@ class DroneEnv(gym.Env):
         self._vx  = self._vy = self._vz = 0.0
         self._yaw = float(self.np_random.uniform(0.0, 360.0))
         self._step_count = 0
+        self._radar_obs = np.zeros(4, dtype=np.float32)
 
         if self._owns_reward_fn:
             self.reward_fn.reset()
@@ -157,5 +169,5 @@ class DroneEnv(gym.Env):
                  self._vx, self._vy, self._vz, self._yaw],
                 dtype=np.float32,
             ),
-            self.radar_obs,
+            self._radar_obs,
         ])

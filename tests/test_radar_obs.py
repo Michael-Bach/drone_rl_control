@@ -37,3 +37,19 @@ def test_radar_obs_set_externally_appears_in_obs():
     env.radar_obs = np.array([1.0, 2.0, 3.0, 100.0], dtype=np.float32)
     obs, _, _, _, _ = env.step(np.zeros(ACTION_DIM, dtype=np.float32))
     np.testing.assert_array_equal(obs[7:], [1.0, 2.0, 3.0, 100.0])
+
+
+def test_radar_obs_cleared_on_reset():
+    env = DroneEnv(_cfg())
+    env.reset(seed=0)
+    env.radar_obs = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    env.reset(seed=1)  # should clear radar_obs
+    obs, _, _, _, _ = env.step(np.zeros(ACTION_DIM, dtype=np.float32))
+    np.testing.assert_array_equal(obs[7:], [0.0, 0.0, 0.0, 0.0])
+
+
+def test_radar_obs_wrong_shape_raises():
+    import pytest
+    env = DroneEnv(_cfg())
+    with pytest.raises(ValueError, match="shape"):
+        env.radar_obs = np.zeros(3, dtype=np.float32)

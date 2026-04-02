@@ -79,6 +79,7 @@ class TelloEnv:
         self._vx = self._vy = self._vz = 0.0
         self._yaw = 0.0
         self._step_count = 0
+        # TODO: set self.radar_obs (float32[4]) from radar station telemetry to match DroneEnv interface
 
     def reset(
         self,
@@ -149,6 +150,8 @@ class TelloEnv:
         # (z does not equal z_prev + vz*dt), which is a known sim-to-real gap.
         self._z   = float(z_cm) / 100.0
         self._yaw = float(yaw_deg) % 360.0
+
+        # TODO: set self.radar_obs (float32[4]) from radar station telemetry to match DroneEnv interface
 
         return np.array(
             [self._x, self._y, self._z,
