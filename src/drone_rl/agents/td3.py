@@ -187,7 +187,7 @@ class TD3Agent(AgentBase):
 
         if self._train_step % self.policy_delay == 0:
             pa     = self.actor(states)
-            a_loss = -self.critic1(states, pa).mean() + 1e-3 * (pa ** 2).mean()
+            a_loss = -self.critic1(states, pa).mean()
             self.actor_opt.zero_grad()
             a_loss.backward()
             nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)

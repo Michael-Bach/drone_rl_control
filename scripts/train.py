@@ -81,61 +81,62 @@ def main() -> None:
     total_steps = 0
     max_steps   = args.max_steps  # None = run full training
 
-    for ep in tqdm(range(num_episodes), desc="Episodes"):
-        obs, _ = env.reset()
-        if hasattr(agent, "noise"):
-            agent.noise.reset()
-        done = trunc = False
-        ep_reward    = 0.0
-        ep_start     = time.time()
-        ep_steps     = 0
-        info: dict   = {}
-        train_metrics: dict = {}
+    try:
+        for ep in tqdm(range(num_episodes), desc="Episodes"):
+            obs, _ = env.reset()
+            if hasattr(agent, "noise"):
+                agent.noise.reset()
+            done = trunc = False
+            ep_reward    = 0.0
+            ep_start     = time.time()
+            ep_steps     = 0
+            info: dict   = {}
+            train_metrics: dict = {}
 
-        while not (done or trunc):
-            if total_steps < warmup:
-                action = env.action_space.sample()
-            else:
-                action = agent.select_action(obs)
+            while not (done or trunc):
+                if total_steps < warmup:
+                    action = env.action_space.sample()
+                else:
+                    action = agent.select_action(obs)
 
-            next_obs, reward, done, trunc, info = env.step(action)
-            agent.store(obs, action, reward, next_obs, float(done))
+                next_obs, reward, done, trunc, info = env.step(action)
+                agent.store(obs, action, reward, next_obs, float(done))
 
-            if total_steps >= warmup:
-                train_metrics = agent.train_step()
+                if total_steps >= warmup:
+                    train_metrics = agent.train_step()
 
-            obs = next_obs
-            ep_reward   += reward
-            total_steps += 1
-            ep_steps    += 1
+                obs = next_obs
+                ep_reward   += reward
+                total_steps += 1
+                ep_steps    += 1
 
-            if max_steps is not None and total_steps >= max_steps:
-                logger.close()
-                return  # smoke test exit
+                if max_steps is not None and total_steps >= max_steps:
+                    return  # smoke test exit
 
-        ep_time = time.time() - ep_start
-        metrics = {
-            "episode_reward":    ep_reward,
-            "episode_length":    ep_steps,
-            "coverage_fraction": info.get("coverage", 0.0),
-            "steps_per_second":  ep_steps / max(ep_time, 1e-6),
-        }
-        metrics.update(train_metrics)
-        logger.log(episode=ep + 1, step=total_steps, metrics=metrics)
+            ep_time = time.time() - ep_start
+            metrics = {
+                "episode_reward":    ep_reward,
+                "episode_length":    ep_steps,
+                "coverage_fraction": info.get("coverage", 0.0),
+                "steps_per_second":  ep_steps / max(ep_time, 1e-6),
+            }
+            metrics.update(train_metrics)
+            logger.log(episode=ep + 1, step=total_steps, metrics=metrics)
 
-        if (ep + 1) % save_every == 0:
-            ckpt = output_dir / f"checkpoint_{ep + 1}.pt"
-            agent.save(str(ckpt))
-            tqdm.write(
-                f"ep={ep+1}  reward={ep_reward:.2f}  "
-                f"coverage={info.get('coverage', 0):.2%}  "
-                f"saved={ckpt.name}"
-            )
+            if (ep + 1) % save_every == 0:
+                ckpt = output_dir / f"checkpoint_{ep + 1}.pt"
+                agent.save(str(ckpt))
+                tqdm.write(
+                    f"ep={ep+1}  reward={ep_reward:.2f}  "
+                    f"coverage={info.get('coverage', 0):.2%}  "
+                    f"saved={ckpt.name}"
+                )
 
-    final_path = output_dir / "checkpoint_final.pt"
-    agent.save(str(final_path))
-    logger.close()
-    tqdm.write(f"Training complete. Final checkpoint: {final_path}")
+        final_path = output_dir / "checkpoint_final.pt"
+        agent.save(str(final_path))
+        tqdm.write(f"Training complete. Final checkpoint: {final_path}")
+    finally:
+        logger.close()
 
 
 if __name__ == "__main__":

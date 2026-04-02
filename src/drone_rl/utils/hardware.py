@@ -20,7 +20,7 @@ Manual test procedure (requires physical Tello):
        e.close()
        "
   3. Tello should take off to ~1 m, hover, then land on e.close()
-  4. Confirm telemetry prints: [x, y, z, vx, vy, vz, yaw]
+  4. Confirm telemetry prints: [x, y, z, vx, vy, vz, yaw, 0, 0, 0, 0]
 
 Radar station integration:
   Extend _read_telemetry() to query radar station TCP/serial API and append
@@ -49,8 +49,9 @@ class TelloEnv:
     """
     Wraps a physical DJI Tello with the same step()/reset() interface as DroneEnv.
 
-    Observation: [x, y, z, vx, vy, vz, yaw] (7-dim, float32)
+    Observation: [x, y, z, vx, vy, vz, yaw, rx, ry, rz, rt] (11-dim, float32)
                  x, y are dead-reckoned from velocity (Tello has no absolute positioning).
+                 rx, ry, rz, rt are radar_obs (zeros until radar station is integrated).
     Action:      [thrust, roll, pitch, yaw_rate] ∈ [-1, 1]
 
     The step() reward is always 0.0 — reward is computed externally using the
@@ -151,10 +152,14 @@ class TelloEnv:
         self._z   = float(z_cm) / 100.0
         self._yaw = float(yaw_deg) % 360.0
 
-        # TODO: set self.radar_obs (float32[4]) from radar station telemetry to match DroneEnv interface
+        # TODO: replace zeros with real radar station telemetry [x, y, z, t]
+        radar_obs = np.zeros(4, dtype=np.float32)
 
-        return np.array(
-            [self._x, self._y, self._z,
-             self._vx, self._vy, self._vz, self._yaw],
-            dtype=np.float32,
-        )
+        return np.concatenate([
+            np.array(
+                [self._x, self._y, self._z,
+                 self._vx, self._vy, self._vz, self._yaw],
+                dtype=np.float32,
+            ),
+            radar_obs,
+        ])
