@@ -15,7 +15,8 @@ def test_csv_written_with_episode_and_step(tmp_path):
 
     csv_path = tmp_path / "train_log.csv"
     assert csv_path.exists()
-    rows = list(csv.DictReader(open(csv_path)))
+    with open(csv_path) as f:
+        rows = list(csv.DictReader(f))
     assert len(rows) == 2
     assert rows[0]["episode"] == "1"
     assert rows[0]["episode_reward"] == "5.0"

@@ -69,6 +69,7 @@ class TrainingLogger:
 
     def close(self) -> None:
         """Flush and close all backends."""
+        self._csv_file.flush()
         self._csv_file.close()
         if self._wandb is not None:
             self._wandb.finish()
