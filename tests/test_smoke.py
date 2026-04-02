@@ -1,29 +1,46 @@
-"""Smoke test: train.py runs 10 steps without raising."""
+"""Smoke tests: train.py runs 10 steps for each algorithm without raising."""
 
 import subprocess
 import sys
 from pathlib import Path
 
+_ROOT = str(Path(__file__).parent.parent)
 
-def test_train_single_drone_smoke():
-    result = subprocess.run(
+
+def _run(extra_args: list) -> subprocess.CompletedProcess:
+    return subprocess.run(
         [sys.executable, "scripts/train.py",
-         "--config", "configs/test.yaml", "--max-steps", "10"],
-        capture_output=True, text=True,
-        cwd=str(Path(__file__).parent.parent),
-    )
-    assert result.returncode == 0, (
-        f"train.py failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+         "--config", "configs/test.yaml", "--max-steps", "10",
+         *extra_args],
+        capture_output=True, text=True, cwd=_ROOT,
     )
 
 
-def test_train_swarm_smoke():
-    result = subprocess.run(
-        [sys.executable, "scripts/train.py",
-         "--config", "configs/test.yaml", "--swarm", "--max-steps", "10"],
-        capture_output=True, text=True,
-        cwd=str(Path(__file__).parent.parent),
-    )
-    assert result.returncode == 0, (
-        f"train.py (swarm) failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
-    )
+def test_td3_single_drone():
+    r = _run(["--algo", "td3"])
+    assert r.returncode == 0, f"STDOUT: {r.stdout}\nSTDERR: {r.stderr}"
+
+
+def test_sac_single_drone():
+    r = _run(["--algo", "sac"])
+    assert r.returncode == 0, f"STDOUT: {r.stdout}\nSTDERR: {r.stderr}"
+
+
+def test_ddpg_single_drone():
+    r = _run(["--algo", "ddpg"])
+    assert r.returncode == 0, f"STDOUT: {r.stdout}\nSTDERR: {r.stderr}"
+
+
+def test_td3_swarm():
+    r = _run(["--algo", "td3", "--swarm"])
+    assert r.returncode == 0, f"STDOUT: {r.stdout}\nSTDERR: {r.stderr}"
+
+
+def test_sac_swarm():
+    r = _run(["--algo", "sac", "--swarm"])
+    assert r.returncode == 0, f"STDOUT: {r.stdout}\nSTDERR: {r.stderr}"
+
+
+def test_ddpg_swarm():
+    r = _run(["--algo", "ddpg", "--swarm"])
+    assert r.returncode == 0, f"STDOUT: {r.stdout}\nSTDERR: {r.stderr}"

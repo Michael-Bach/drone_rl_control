@@ -38,6 +38,9 @@ hardware = [
 viz = [
   "imageio[ffmpeg]>=2.31",
 ]
+wandb = [
+  "wandb>=0.16",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
