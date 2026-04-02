@@ -7,7 +7,7 @@ Usage
   python scripts/evaluate.py --config configs/single_drone.yaml \
       --checkpoint outputs/checkpoint_final.pt
   python scripts/evaluate.py --config configs/swarm.yaml --swarm \
-      --checkpoint outputs/checkpoint_final.pt
+      --checkpoint outputs/checkpoint_final.pt --algo td3
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from drone_rl.agents.td3 import TD3Agent
+from drone_rl.agents.factory import make_agent
 from drone_rl.envs.drone_env import DroneEnv, OBS_DIM
 from drone_rl.envs.swarm_env import SwarmEnv
 from drone_rl.utils.visualization import plot_coverage_heatmap, plot_trajectories
@@ -39,29 +39,28 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--swarm",      action="store_true")
     parser.add_argument("--seed",       type=int, default=0)
+    parser.add_argument("--algo",       default=None,
+                        help="Override agent.type in config (td3 | sac | ddpg)")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    if args.algo:
+        cfg["agent"]["type"] = args.algo
+
     env = SwarmEnv(cfg) if args.swarm else DroneEnv(cfg)
     n   = cfg["env"].get("n_drones", 1) if args.swarm else 1
 
     obs_dim    = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    ag = cfg["agent"]
-    agent = TD3Agent(
-        state_dim=obs_dim, action_dim=action_dim,
-        noise_cfg={"kind": "gaussian", "dim": action_dim, "sigma": 0.0},
-        hidden=int(ag.get("hidden", 256)),
-        device=str(cfg.get("device", "cpu")),
-    )
+    agent = make_agent(cfg, obs_dim, action_dim)
     agent.load(args.checkpoint)
 
     obs, _ = env.reset(seed=args.seed)
     done = trunc = False
     obs_dim_single = OBS_DIM
 
-    # (n_drones, T, 7) trajectory storage
+    # (n_drones, T, OBS_DIM) trajectory storage
     trajectories: List[List[np.ndarray]] = [[] for _ in range(n)]
     ep_reward = 0.0
     info: dict = {}
@@ -71,7 +70,7 @@ def main() -> None:
             trajectories[i].append(
                 obs[i * obs_dim_single:(i + 1) * obs_dim_single].copy()
             )
-        action = agent.select_action_deterministic(obs)
+        action = agent.select_action(obs, deterministic=True)
         obs, reward, done, trunc, info = env.step(action)
         ep_reward += reward
 
