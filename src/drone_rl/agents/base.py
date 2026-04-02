@@ -18,7 +18,9 @@ class RunningMeanStd:
 
     def update(self, x: np.ndarray) -> None:
         x = np.asarray(x, dtype=np.float64)
-        if x.ndim == 1:
+        if x.ndim == 0:
+            x = x.reshape(1, 1)
+        elif x.ndim == 1:
             x = x[None, :]
         b_mean, b_var, b_cnt = x.mean(0), x.var(0), x.shape[0]
         delta     = b_mean - self.mean
