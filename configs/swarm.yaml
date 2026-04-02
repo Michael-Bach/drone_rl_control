@@ -17,22 +17,31 @@ reward:
   proximity_penalty: 5.0
 
 agent:
+  type: td3  # td3 | sac | ddpg  (overridable via --algo)
   lr_actor: 0.0001
   lr_critic: 0.001
   gamma: 0.99
   tau: 0.005
   hidden: 256
   buffer_capacity: 200000
+  normalize_obs: true
+  normalize_rew: true
+  # td3 / ddpg only
+  policy_delay: 2
   noise:
     kind: decay
-    dim: 12  # overridden at runtime by build_agent() to match actual action_dim
+    dim: 12  # overridden at runtime by factory to match actual action_dim
     per: episode
     gamma: 0.995
     scale_min: 0.02
     base:
       kind: gaussian
-      dim: 12  # overridden at runtime by build_agent() to match actual action_dim
+      dim: 12  # overridden at runtime by factory to match actual action_dim
       sigma: 0.3
+  # sac only
+  lr_alpha: 0.0003
+  init_alpha: 0.2
+  auto_tune_alpha: true
 
 training:
   num_episodes: 3000
@@ -40,6 +49,7 @@ training:
   batch_size: 128
   save_every: 500
   rollout_every: 200
+  wandb: false
 
 output_dir: outputs
 device: cpu

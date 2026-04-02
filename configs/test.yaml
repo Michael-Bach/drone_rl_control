@@ -17,16 +17,23 @@ reward:
   proximity_penalty: 5.0
 
 agent:
+  type: td3  # overridden per-test via --algo
   lr_actor: 0.001
   lr_critic: 0.001
   gamma: 0.99
   tau: 0.005
   hidden: 64
   buffer_capacity: 1000
+  normalize_obs: true
+  normalize_rew: true
+  policy_delay: 2
   noise:
     kind: gaussian
     dim: 8
     sigma: 0.1
+  lr_alpha: 0.001
+  init_alpha: 0.2
+  auto_tune_alpha: true
 
 training:
   num_episodes: 2
@@ -34,6 +41,7 @@ training:
   batch_size: 10
   save_every: 1
   rollout_every: 1
+  wandb: false
 
 output_dir: outputs/test
 device: cpu
