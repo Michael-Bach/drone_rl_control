@@ -88,7 +88,7 @@ def agent():
     return TD3Agent(
         state_dim=STATE_DIM, action_dim=ACTION_DIM,
         noise_cfg={"kind": "gaussian", "dim": ACTION_DIM, "sigma": 0.1},
-        hidden=64, buffer_capacity=200, device="cpu",
+        hidden=64, buffer_capacity=200, batch_size=10, device="cpu",
     )
 
 
@@ -104,27 +104,36 @@ def test_select_action_clipped(agent):
     assert np.all(action >= -1.0) and np.all(action <= 1.0)
 
 
-def test_train_returns_false_when_buffer_empty(agent):
-    result = agent.train(batch_size=10)
-    assert result is False
+def test_select_action_deterministic_no_noise(agent):
+    obs = np.zeros(STATE_DIM, dtype=np.float32)
+    # Two deterministic calls must return identical results
+    a1 = agent.select_action(obs, deterministic=True)
+    a2 = agent.select_action(obs, deterministic=True)
+    np.testing.assert_array_equal(a1, a2)
 
 
-def test_train_after_filling_buffer(agent):
+def test_train_step_empty_when_buffer_not_ready(agent):
+    result = agent.train_step()
+    assert result == {}
+
+
+def test_train_step_returns_metric_dict(agent):
     obs = np.zeros(STATE_DIM, dtype=np.float32)
     for _ in range(50):
         agent.store(obs, np.zeros(ACTION_DIM), 1.0, obs, False)
-    result = agent.train(batch_size=10)
-    # train() returns bool; True = actor updated this step, False = critic-only step
-    assert isinstance(result, bool)
+    result = agent.train_step()
+    assert isinstance(result, dict)
+    assert "critic_loss" in result
+    assert "actor_loss" in result
 
 
 def test_save_and_load(agent, tmp_path):
     obs = np.zeros(STATE_DIM, dtype=np.float32)
     for _ in range(20):
         agent.store(obs, np.zeros(ACTION_DIM), 1.0, obs, False)
-    agent.train(batch_size=10)
+    agent.train_step()
     path = str(tmp_path / "checkpoint.pt")
     agent.save(path)
     agent.load(path)
-    action = agent.select_action_deterministic(obs)
+    action = agent.select_action(obs, deterministic=True)
     assert action.shape == (ACTION_DIM,)

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from drone_rl.agents.base import AgentBase, RunningMeanStd
 from drone_rl.agents.noise import BaseNoise, make_noise
 from drone_rl.agents.replay_buffer import ReplayBuffer
 
@@ -47,39 +48,10 @@ class Critic(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# Running normalisation (Welford's algorithm)
-# ---------------------------------------------------------------------------
-
-class RunningMeanStd:
-    def __init__(self, shape: tuple, eps: float = 1e-4) -> None:
-        self.mean  = np.zeros(shape, dtype=np.float64)
-        self.var   = np.ones(shape,  dtype=np.float64)
-        self.count = eps
-
-    def update(self, x: np.ndarray) -> None:
-        x = np.asarray(x, dtype=np.float64)
-        if x.ndim == 1:
-            x = x[None, :]
-        b_mean, b_var, b_cnt = x.mean(0), x.var(0), x.shape[0]
-        delta     = b_mean - self.mean
-        tot_count = self.count + b_cnt
-        new_mean  = self.mean + delta * b_cnt / tot_count
-        M2 = (self.var * self.count + b_var * b_cnt
-              + delta**2 * self.count * b_cnt / tot_count)
-        self.mean, self.var, self.count = new_mean, M2 / tot_count, tot_count
-
-    def normalize(self, x: np.ndarray, clip: Optional[float] = None) -> np.ndarray:
-        x = (x - self.mean) / (np.sqrt(self.var) + 1e-8)
-        if clip is not None:
-            x = np.clip(x, -clip, clip)
-        return x.astype(np.float32)
-
-
-# ---------------------------------------------------------------------------
 # TD3 Agent
 # ---------------------------------------------------------------------------
 
-class TD3Agent:
+class TD3Agent(AgentBase):
     """
     Twin Delayed DDPG with optional obs/reward normalisation.
 
@@ -97,6 +69,7 @@ class TD3Agent:
     noise_clip      : clamp range for smoothing noise
     hidden          : hidden layer width
     buffer_capacity : replay buffer capacity
+    batch_size      : training batch size
     normalize_obs   : enable online obs normalisation
     normalize_rew   : enable online reward normalisation
     grad_clip       : max gradient norm
@@ -117,6 +90,7 @@ class TD3Agent:
         noise_clip: float = 0.3,
         hidden: int = 256,
         buffer_capacity: int = 200_000,
+        batch_size: int = 64,
         normalize_obs: bool = True,
         normalize_rew: bool = True,
         grad_clip: float = 1.0,
@@ -129,6 +103,7 @@ class TD3Agent:
         self.policy_noise = policy_noise
         self.noise_clip   = noise_clip
         self.grad_clip    = grad_clip
+        self.batch_size   = batch_size
         self.normalize_obs = normalize_obs
         self.normalize_rew = normalize_rew
         self._train_step  = 0
@@ -150,49 +125,33 @@ class TD3Agent:
         self.obs_rms = RunningMeanStd(shape=(state_dim,))
         self.rew_rms = RunningMeanStd(shape=())
 
-        self.actor_loss: float  = 0.0
-        self.critic_loss: float = 0.0
-        self.mean_q: float      = 0.0
-
     # ------------------------------------------------------------------
-    # Interaction
+    # AgentBase interface
     # ------------------------------------------------------------------
 
-    def select_action(self, obs: np.ndarray) -> np.ndarray:
-        """Noisy action clipped to [-1, 1]."""
+    def select_action(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
         if self.normalize_obs:
             obs = self.obs_rms.normalize(obs)
         t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             a = self.actor(t).cpu().numpy()[0]
+        if deterministic:
+            return np.clip(a, -1.0, 1.0).astype(np.float32)
         return np.clip(a + self.noise(), -1.0, 1.0).astype(np.float32)
 
-    def select_action_deterministic(self, obs: np.ndarray) -> np.ndarray:
-        """Greedy action for evaluation (no noise)."""
-        if self.normalize_obs:
-            obs = self.obs_rms.normalize(obs)
-        t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
-        with torch.no_grad():
-            return np.clip(self.actor(t).cpu().numpy()[0], -1.0, 1.0).astype(np.float32)
-
-    def store(self, obs, action, reward, next_obs, done) -> None:
-        """Store transition and update normalisation statistics."""
+    def store(self, obs: np.ndarray, action: np.ndarray, reward: float,
+              next_obs: np.ndarray, done: float) -> None:
         if self.normalize_obs:
             self.obs_rms.update(np.array([obs]))
         if self.normalize_rew:
             self.rew_rms.update(np.array([reward]))
         self.buffer.add(obs, action, reward, next_obs, done)
 
-    # ------------------------------------------------------------------
-    # Training
-    # ------------------------------------------------------------------
+    def train_step(self) -> dict:
+        if not self.buffer.is_ready(self.batch_size):
+            return {}
 
-    def train(self, batch_size: int = 64) -> bool:
-        """One gradient step. Returns True if actor was updated."""
-        if not self.buffer.is_ready(batch_size):
-            return False
-
-        states, actions, rewards, next_s, dones = self.buffer.sample(batch_size)
+        states, actions, rewards, next_s, dones = self.buffer.sample(self.batch_size)
         states  = states.to(self.device)
         actions = actions.to(self.device)
         next_s  = next_s.to(self.device)
@@ -222,12 +181,12 @@ class TD3Agent:
             opt.step()
             c_losses.append(loss.item())
 
-        self.critic_loss = sum(c_losses) / len(c_losses)
-        self.mean_q      = self.critic1(states, actions).mean().item()
+        critic_loss = sum(c_losses) / len(c_losses)
+        mean_q      = self.critic1(states, actions).mean().item()
+        actor_loss  = 0.0
 
-        actor_updated = False
         if self._train_step % self.policy_delay == 0:
-            pa    = self.actor(states)
+            pa     = self.actor(states)
             a_loss = -self.critic1(states, pa).mean() + 1e-3 * (pa ** 2).mean()
             self.actor_opt.zero_grad()
             a_loss.backward()
@@ -237,19 +196,10 @@ class TD3Agent:
                              (self.critic1_target, self.critic1),
                              (self.critic2_target, self.critic2)):
                 self._soft_update(tgt, src, self.tau)
-            self.actor_loss = a_loss.item()
-            actor_updated   = True
+            actor_loss = a_loss.item()
 
         self._train_step += 1
-        return actor_updated
-
-    # ------------------------------------------------------------------
-    # Utilities
-    # ------------------------------------------------------------------
-
-    def _soft_update(self, target: nn.Module, source: nn.Module, tau: float) -> None:
-        for tp, sp in zip(target.parameters(), source.parameters()):
-            tp.data.copy_(tau * sp.data + (1 - tau) * tp.data)
+        return {"critic_loss": critic_loss, "actor_loss": actor_loss, "mean_q": mean_q}
 
     def save(self, path: str) -> None:
         torch.save({
@@ -280,3 +230,11 @@ class TD3Agent:
         if "rew_rms_mean" in ck:
             self.rew_rms.mean = ck["rew_rms_mean"]
             self.rew_rms.var  = ck["rew_rms_var"]
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _soft_update(self, target: nn.Module, source: nn.Module, tau: float) -> None:
+        for tp, sp in zip(target.parameters(), source.parameters()):
+            tp.data.copy_(tau * sp.data + (1 - tau) * tp.data)
