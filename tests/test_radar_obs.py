@@ -53,3 +53,12 @@ def test_radar_obs_wrong_shape_raises():
     env = DroneEnv(_cfg())
     with pytest.raises(ValueError, match="shape"):
         env.radar_obs = np.zeros(4, dtype=np.float32)
+
+
+def test_radar_obs_getter_returns_independent_copy():
+    env = DroneEnv(_cfg())
+    env.reset(seed=0)
+    a = env.radar_obs
+    a[0] = 999.0
+    b = env.radar_obs
+    assert b[0] != 999.0, "getter must return a copy, not a mutable reference"

@@ -79,7 +79,7 @@ class DroneEnv(gym.Env):
 
     @property
     def radar_obs(self) -> np.ndarray:
-        return self._radar_obs
+        return self._radar_obs.copy()
 
     @radar_obs.setter
     def radar_obs(self, value: np.ndarray) -> None:
