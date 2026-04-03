@@ -22,9 +22,13 @@ def fake_serial(monkeypatch):
 
 
 def _make_conn(fake_serial, lines):
-    """Return a mock serial connection whose readline() returns *lines* in order."""
+    """Return a mock serial connection whose readline() returns *lines* then blocks forever."""
     conn = MagicMock()
-    conn.readline.side_effect = list(lines) + [b""] * 500
+    def _side_effect():
+        yield from lines
+        while True:
+            yield b""
+    conn.readline.side_effect = _side_effect()
     fake_serial.Serial.return_value = conn
     return conn
 
