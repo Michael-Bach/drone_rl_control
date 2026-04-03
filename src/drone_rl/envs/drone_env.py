@@ -16,7 +16,7 @@ MAX_ALTITUDE = 10.0  # m
 MAX_ACCEL    = 4.0   # m/s²
 MAX_YAW_RATE = 90.0  # deg/s
 
-OBS_DIM    = 11  # x, y, z, vx, vy, vz, yaw, radar_x, radar_y, radar_z, radar_t
+OBS_DIM    = 16  # x, y, z, vx, vy, vz, yaw, x1, y1, s1, x2, y2, s2, x3, y3, s3
 ACTION_DIM = 4   # thrust, roll, pitch, yaw_rate
 
 
@@ -24,7 +24,7 @@ class DroneEnv(gym.Env):
     """
     Single drone modelled as a point-mass in a bounded 3-D area.
 
-    Observation: [x, y, z, vx, vy, vz, yaw, radar_x, radar_y, radar_z, radar_t]  (11-dim, float32)
+    Observation: [x, y, z, vx, vy, vz, yaw, x1, y1, s1, x2, y2, s2, x3, y3, s3]  (16-dim, float32)
     Action:      [thrust, roll, pitch, yaw_rate] ∈ [-1,1] (4-dim, float32)
 
     Parameters
@@ -75,7 +75,7 @@ class DroneEnv(gym.Env):
         self._vx = self._vy = self._vz = 0.0
         self._yaw = 0.0
         self._step_count = 0
-        self._radar_obs: np.ndarray = np.zeros(4, dtype=np.float32)
+        self._radar_obs: np.ndarray = np.zeros(9, dtype=np.float32)
 
     @property
     def radar_obs(self) -> np.ndarray:
@@ -84,8 +84,8 @@ class DroneEnv(gym.Env):
     @radar_obs.setter
     def radar_obs(self, value: np.ndarray) -> None:
         v = np.asarray(value, dtype=np.float32)
-        if v.shape != (4,):
-            raise ValueError(f"radar_obs must have shape (4,), got {v.shape}")
+        if v.shape != (9,):
+            raise ValueError(f"radar_obs must have shape (9,), got {v.shape}")
         self._radar_obs = v
 
     # ------------------------------------------------------------------
@@ -105,7 +105,7 @@ class DroneEnv(gym.Env):
         self._vx  = self._vy = self._vz = 0.0
         self._yaw = float(self.np_random.uniform(0.0, 360.0))
         self._step_count = 0
-        self._radar_obs = np.zeros(4, dtype=np.float32)
+        self._radar_obs = np.zeros(9, dtype=np.float32)
 
         if self._owns_reward_fn:
             self.reward_fn.reset()
