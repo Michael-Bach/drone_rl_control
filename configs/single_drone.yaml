@@ -50,3 +50,6 @@ training:
 
 output_dir: outputs
 device: cpu
+
+radar:
+  port: /dev/rfcomm0   # Linux BT SPP; set to null to disable radar

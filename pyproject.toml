@@ -34,6 +34,7 @@ dev = [
 ]
 hardware = [
   "djitellopy>=2.4",
+  "pyserial>=3.5",
 ]
 viz = [
   "imageio[ffmpeg]>=2.31",

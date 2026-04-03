@@ -45,3 +45,6 @@ training:
 
 output_dir: outputs/test
 device: cpu
+
+radar:
+  port: null   # no hardware in CI
