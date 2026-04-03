@@ -6,9 +6,11 @@ Swap DroneEnv for TelloEnv at deploy time. SwarmEnv and TD3Agent are untouched.
 Install hardware extras first:
   pip install "drone-rl[hardware]"
 
-Manual test procedure (requires physical Tello):
+Manual test procedure (requires physical Tello + ESP32-Radar):
   1. Power on Tello, connect laptop to its WiFi SSID (TELLO-XXXXXX)
-  2. Run:
+  2. Pair ESP32-Radar over Bluetooth and bind: sudo rfcomm bind 0 <MAC>
+  3. Add radar.port to your config YAML: radar:\n  port: /dev/rfcomm0
+  4. Run:
        python -c "
        import yaml
        from drone_rl.utils.hardware import TelloEnv
@@ -16,15 +18,16 @@ Manual test procedure (requires physical Tello):
            cfg = yaml.safe_load(f)
        e = TelloEnv(cfg)
        obs, _ = e.reset()
+       print('obs shape:', obs.shape)   # expect (16,)
        print('obs:', obs)
        e.close()
        "
-  3. Tello should take off to ~1 m, hover, then land on e.close()
-  4. Confirm telemetry prints: [x, y, z, vx, vy, vz, yaw, 0, 0, 0, 0]
+  5. Tello should take off to ~1 m, hover, then land on e.close()
+  6. Confirm obs shape is (16,); radar slots (indices 7-15) non-zero when targets present
 
-Radar station integration:
-  Extend _read_telemetry() to query radar station TCP/serial API and append
-  detections to the state vector. Update OBS_DIM in the caller accordingly.
+Radar-less deployment:
+  Omit the `radar` key in config (or set `radar: port: null`). TelloEnv will
+  leave radar_obs at zeros — the policy still works; radar features are inactive.
 """
 
 from __future__ import annotations
@@ -33,13 +36,13 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
-# djitellopy is an optional hardware dependency. The guard allows the rest of
-# the package to import cleanly without hardware extras installed.
 try:
     from djitellopy import Tello
     _TELLO_AVAILABLE = True
 except ImportError:
     _TELLO_AVAILABLE = False
+
+from drone_rl.utils.radar import RadarReceiver
 
 # Tello RC command scale: actions in [-1, 1] map to [-100, 100] integers
 _RC_SCALE = 100
@@ -49,14 +52,14 @@ class TelloEnv:
     """
     Wraps a physical DJI Tello with the same step()/reset() interface as DroneEnv.
 
-    Observation: [x, y, z, vx, vy, vz, yaw, rx, ry, rz, rt] (11-dim, float32)
+    Observation: [x, y, z, vx, vy, vz, yaw, x1, y1, s1, x2, y2, s2, x3, y3, s3]
+                 (16-dim, float32)
                  x, y are dead-reckoned from velocity (Tello has no absolute positioning).
-                 rx, ry, rz, rt are radar_obs (zeros until radar station is integrated).
+                 x1..s3 are the three LD2450 radar targets from RadarReceiver.latest.
     Action:      [thrust, roll, pitch, yaw_rate] ∈ [-1, 1]
 
     The step() reward is always 0.0 — reward is computed externally using the
-    same CoverageReward as the simulation. Pass the shared CoverageReward to
-    SwarmEnv as usual; TelloEnv is used only as the innermost physics layer.
+    same CoverageReward as the simulation.
     """
 
     def __init__(self, cfg: Dict[str, Any]) -> None:
@@ -72,15 +75,20 @@ class TelloEnv:
 
         self._tello = Tello()
         self._tello.connect()
-        # Video stream not opened — TelloEnv uses only telemetry (state dict).
-        # Add self._tello.streamon() here if camera input is needed in future.
 
         # Dead-reckoned position (Tello has no absolute positioning sensor)
         self._x = self._y = self._z = 0.0
         self._vx = self._vy = self._vz = 0.0
         self._yaw = 0.0
         self._step_count = 0
-        # TODO: set self.radar_obs (float32[4]) from radar station telemetry to match DroneEnv interface
+
+        # Radar: optional — only active when cfg["radar"]["port"] is set
+        radar_port = cfg.get("radar", {}).get("port")
+        if radar_port:
+            self._radar: Optional[RadarReceiver] = RadarReceiver(port=radar_port)
+            self._radar.start()
+        else:
+            self._radar = None
 
     def reset(
         self,
@@ -115,13 +123,14 @@ class TelloEnv:
         self._step_count += 1
         trunc = self._step_count >= self.max_steps
 
-        # Reward is always 0.0 — computed externally by CoverageReward
         return obs, 0.0, False, trunc, {}
 
     def close(self) -> None:
-        """Land and disconnect."""
+        """Land, disconnect, and stop radar receiver."""
         self._tello.land()
         self._tello.end()
+        if self._radar is not None:
+            self._radar.stop()
 
     def _read_telemetry(self) -> np.ndarray:
         """
@@ -129,10 +138,7 @@ class TelloEnv:
 
         Tello velocity is in cm/s; converted to m/s here.
         Height is in cm; converted to m.
-        Radar station detections can be added here as extra state dimensions.
         """
-        # Read the full state dict once; .get(key, 0) is safe when telemetry
-        # is not yet available (avoids TelloException from individual getters).
         state   = self._tello.get_current_state()
         vx_cms  = state.get("vgx", 0)
         vy_cms  = state.get("vgy", 0)
@@ -143,17 +149,12 @@ class TelloEnv:
         self._vx = vx_cms / 100.0
         self._vy = vy_cms / 100.0
         self._vz = vz_cms / 100.0
-        # x, y: dead-reckoned by integrating velocity (no GPS on Tello)
         self._x  += self._vx * self.dt
         self._y  += self._vy * self.dt
-        # z: taken directly from barometric/ToF height sensor — more accurate
-        # than integrating vz. Note: _z and _vz are kinematically inconsistent
-        # (z does not equal z_prev + vz*dt), which is a known sim-to-real gap.
         self._z   = float(z_cm) / 100.0
         self._yaw = float(yaw_deg) % 360.0
 
-        # TODO: replace zeros with real radar station telemetry [x, y, z, t]
-        radar_obs = np.zeros(4, dtype=np.float32)
+        radar_obs = self._radar.latest if self._radar is not None else np.zeros(9, dtype=np.float32)
 
         return np.concatenate([
             np.array(
