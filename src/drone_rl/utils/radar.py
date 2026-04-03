@@ -9,9 +9,11 @@ import numpy as np
 
 try:
     import serial
+    from serial import SerialException as _SerialException
     _SERIAL_AVAILABLE = True
 except ImportError:
     serial = None  # type: ignore[assignment]
+    _SerialException = OSError  # fallback so except clause is always valid
     _SERIAL_AVAILABLE = False
 
 
@@ -76,7 +78,7 @@ class RadarReceiver:
                 if len(parts) != 9:
                     continue
                 values = np.array([float(p) for p in parts], dtype=np.float32)
-            except (ValueError, serial.SerialException) as exc:
+            except (ValueError, _SerialException) as exc:
                 print(f"radar_bt_receiver: {exc}", file=sys.stderr)
                 continue
             with self._lock:
